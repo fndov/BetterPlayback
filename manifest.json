@@ -3,7 +3,7 @@
   "name": "YouTube Unlimited Playback Rate",
   "version": "1.0.0",
   "description": "Remove the 2x limit from Ctrl+> / Ctrl+< on YouTube.",
-  "permissions": [],
+  "permissions": ["storage"],
   "content_scripts": [
     {
       "matches": ["https://www.youtube.com/*", "https://youtu.be/*"],

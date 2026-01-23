@@ -1,9 +1,12 @@
 const RATE_STEP = 0.25;
 const MIN_RATE = 0.1;
 const OVERLAY_DURATION_MS = 900;
+const STORAGE_KEY = "ytUnlimitedPlaybackRate";
 
 let lastRequestedRate = null;
 let overlayTimer = null;
+let savedRate = null;
+let currentVideo = null;
 
 function getActiveVideo() {
   return document.querySelector("video");
@@ -55,6 +58,31 @@ function showOverlay(video, rate) {
   }, OVERLAY_DURATION_MS);
 }
 
+function getStoredRate() {
+  return new Promise((resolve) => {
+    if (!chrome?.storage?.local) {
+      resolve(null);
+      return;
+    }
+    chrome.storage.local.get(STORAGE_KEY, (result) => {
+      const value = result?.[STORAGE_KEY];
+      resolve(typeof value === "number" ? value : null);
+    });
+  });
+}
+
+function saveStoredRate(rate) {
+  if (!chrome?.storage?.local) {
+    return;
+  }
+  chrome.storage.local.set({ [STORAGE_KEY]: rate });
+}
+
+function broadcastRate(rate) {
+  savedRate = rate;
+  saveStoredRate(rate);
+}
+
 function isSpeedHotkey(event) {
   if (event.altKey || event.metaKey) {
     return null;
@@ -83,6 +111,7 @@ function isSpeedHotkey(event) {
 function applyPlaybackRate(video, targetRate) {
   video.playbackRate = targetRate;
   lastRequestedRate = targetRate;
+  broadcastRate(targetRate);
   showOverlay(video, targetRate);
 
   requestAnimationFrame(() => {
@@ -90,6 +119,34 @@ function applyPlaybackRate(video, targetRate) {
       video.playbackRate = targetRate;
     }
   });
+}
+
+function ensureVideoRate(video) {
+  if (!video) {
+    return;
+  }
+  if (savedRate === null) {
+    return;
+  }
+  if (Math.abs(video.playbackRate - savedRate) > 0.001) {
+    applyPlaybackRate(video, savedRate);
+  }
+}
+
+function attachVideo(video) {
+  if (!video || video === currentVideo) {
+    return;
+  }
+
+  currentVideo = video;
+  ensureVideoRate(video);
+  video.addEventListener(
+    "loadedmetadata",
+    () => {
+      ensureVideoRate(video);
+    },
+    { once: true }
+  );
 }
 
 function handleKeydown(event) {
@@ -113,14 +170,55 @@ function handleKeydown(event) {
 
 function handleRateChange(event) {
   const video = event.target;
-  if (!lastRequestedRate) {
+  if (lastRequestedRate && video.playbackRate < lastRequestedRate) {
+    applyPlaybackRate(video, lastRequestedRate);
     return;
   }
 
-  if (video.playbackRate < lastRequestedRate) {
-    applyPlaybackRate(video, lastRequestedRate);
-  }
+  broadcastRate(video.playbackRate);
 }
 
 window.addEventListener("keydown", handleKeydown, true);
 document.addEventListener("ratechange", handleRateChange, true);
+
+document.addEventListener(
+  "yt-navigate-finish",
+  () => attachVideo(getActiveVideo()),
+  true
+);
+document.addEventListener(
+  "yt-page-data-updated",
+  () => attachVideo(getActiveVideo()),
+  true
+);
+window.addEventListener("load", () => attachVideo(getActiveVideo()), true);
+
+const videoObserver = new MutationObserver(() => {
+  attachVideo(getActiveVideo());
+});
+videoObserver.observe(document.documentElement, {
+  childList: true,
+  subtree: true,
+});
+
+getStoredRate().then((rate) => {
+  savedRate = rate;
+  attachVideo(getActiveVideo());
+});
+
+if (chrome?.storage?.onChanged) {
+  chrome.storage.onChanged.addListener((changes, areaName) => {
+    if (areaName !== "local" || !changes[STORAGE_KEY]) {
+      return;
+    }
+    const nextRate = changes[STORAGE_KEY].newValue;
+    if (typeof nextRate !== "number") {
+      return;
+    }
+    savedRate = nextRate;
+    const video = getActiveVideo();
+    if (video) {
+      ensureVideoRate(video);
+    }
+  });
+}

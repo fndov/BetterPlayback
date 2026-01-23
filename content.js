@@ -2,8 +2,11 @@ const RATE_STEP = 0.25;
 const MIN_RATE = 0.1;
 const OVERLAY_DURATION_MS = 900;
 const STORAGE_KEY = "ytUnlimitedPlaybackRate";
+const RATE_EPSILON = 0.001;
+const ENFORCE_WINDOW_MS = 1200;
 
 let lastRequestedRate = null;
+let lastEnforceUntil = 0;
 let overlayTimer = null;
 let savedRate = null;
 let currentVideo = null;
@@ -79,6 +82,9 @@ function saveStoredRate(rate) {
 }
 
 function broadcastRate(rate) {
+  if (savedRate !== null && Math.abs(savedRate - rate) < RATE_EPSILON) {
+    return;
+  }
   savedRate = rate;
   saveStoredRate(rate);
 }
@@ -109,13 +115,17 @@ function isSpeedHotkey(event) {
 }
 
 function applyPlaybackRate(video, targetRate) {
+  if (Math.abs(video.playbackRate - targetRate) < RATE_EPSILON) {
+    return;
+  }
   video.playbackRate = targetRate;
   lastRequestedRate = targetRate;
+  lastEnforceUntil = performance.now() + ENFORCE_WINDOW_MS;
   broadcastRate(targetRate);
   showOverlay(video, targetRate);
 
   requestAnimationFrame(() => {
-    if (Math.abs(video.playbackRate - targetRate) > 0.001) {
+    if (Math.abs(video.playbackRate - targetRate) > RATE_EPSILON) {
       video.playbackRate = targetRate;
     }
   });
@@ -128,7 +138,7 @@ function ensureVideoRate(video) {
   if (savedRate === null) {
     return;
   }
-  if (Math.abs(video.playbackRate - savedRate) > 0.001) {
+  if (Math.abs(video.playbackRate - savedRate) > RATE_EPSILON) {
     applyPlaybackRate(video, savedRate);
   }
 }
@@ -170,11 +180,17 @@ function handleKeydown(event) {
 
 function handleRateChange(event) {
   const video = event.target;
-  if (lastRequestedRate && video.playbackRate < lastRequestedRate) {
+  const now = performance.now();
+  if (
+    lastRequestedRate !== null &&
+    now < lastEnforceUntil &&
+    video.playbackRate + RATE_EPSILON < lastRequestedRate
+  ) {
     applyPlaybackRate(video, lastRequestedRate);
     return;
   }
 
+  lastRequestedRate = null;
   broadcastRate(video.playbackRate);
 }
 
@@ -213,6 +229,9 @@ if (chrome?.storage?.onChanged) {
     }
     const nextRate = changes[STORAGE_KEY].newValue;
     if (typeof nextRate !== "number") {
+      return;
+    }
+    if (savedRate !== null && Math.abs(savedRate - nextRate) < RATE_EPSILON) {
       return;
     }
     savedRate = nextRate;

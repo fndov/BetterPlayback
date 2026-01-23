@@ -1,14 +1,16 @@
-# YouTube Unlimited Playback Rate
+BetterPlayback
+Removes YouTube's 2x cap and keeps your speed locked across tabs + new videos.
 
-This Chrome extension removes the 2x limit from YouTube's Ctrl+> / Ctrl+< speed controls.
+Install (unpacked)
+Open chrome://extensions
+Enable Developer mode
+Load unpacked and pick this folder
 
-## Install (unpacked)
-1. Open `chrome://extensions`
-2. Enable "Developer mode"
-3. Click "Load unpacked" and select this folder
+Controls
+Ctrl + > = faster
+Ctrl + < = slower
 
-## Use
-- `Ctrl` + `>` increases playback speed by 0.25x
-- `Ctrl` + `<` decreases playback speed by 0.25x (min 0.1x)
+Speed changes persist across reloads, sync across tabs, and show a small speed popup inside the player.
 
-Adjust `RATE_STEP` or `MIN_RATE` in `content.js` if you want different values.
+Tweaks
+Edit content.js if you want to change RATE_STEP (default 0.25) or MIN_RATE (default 0.1).

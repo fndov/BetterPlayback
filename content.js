@@ -1,5 +1,5 @@
 const RATE_STEP = 0.25;
-const MIN_RATE = 0.1;
+const MIN_RATE = 0.25;
 const OVERLAY_DURATION_MS = 900;
 const STORAGE_KEY = "ytUnlimitedPlaybackRate";
 const RATE_EPSILON = 0.001;
@@ -10,6 +10,7 @@ let lastEnforceUntil = 0;
 let overlayTimer = null;
 let savedRate = null;
 let currentVideo = null;
+let currentVideoMetadataHandler = null;
 
 function getActiveVideo() {
   return document.querySelector("video");
@@ -144,19 +145,26 @@ function ensureVideoRate(video) {
 }
 
 function attachVideo(video) {
-  if (!video || video === currentVideo) {
+  if (!video) {
     return;
   }
 
-  currentVideo = video;
-  ensureVideoRate(video);
-  video.addEventListener(
-    "loadedmetadata",
-    () => {
+  if (video !== currentVideo) {
+    if (currentVideo && currentVideoMetadataHandler) {
+      currentVideo.removeEventListener(
+        "loadedmetadata",
+        currentVideoMetadataHandler
+      );
+    }
+
+    currentVideo = video;
+    currentVideoMetadataHandler = () => {
       ensureVideoRate(video);
-    },
-    { once: true }
-  );
+    };
+    video.addEventListener("loadedmetadata", currentVideoMetadataHandler);
+  }
+
+  ensureVideoRate(video);
 }
 
 function handleKeydown(event) {
